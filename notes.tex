@@ -1,0 +1,356 @@
+\documentclass[twoside]{article}
+
+\usepackage{epsfig}
+\usepackage{tabularx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\setlength{\oddsidemargin}{0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.6 in}
+\setlength{\textwidth}{6.5 in}
+\setlength{\textheight}{8.5 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0 in}
+\setlength{\parskip}{0.1 in}
+
+\newcommand{\lecture}[3]{
+   \pagestyle{myheadings}
+   \thispagestyle{plain}
+   \newpage
+   \setcounter{page}{1}
+   \noindent
+   \begin{center}
+   \framebox{
+      \vbox{\vspace{2mm}
+    \hbox to 6.28in { {\bf CSE 291A/DSC 291:~Data Systems for Machine Learning, Spring 2026 \hfill} }
+       \vspace{6mm}
+       \hbox to 6.28in { {\Large \hfill #1  \hfill} }
+       \vspace{6mm}
+       \hbox to 6.28in{
+        \it
+        \begin{tabularx}{6.28in}{l>{\raggedleft\arraybackslash}X}
+            Lecturer: #2 & Scribes: #3
+        \end{tabularx}
+       }
+      \vspace{2mm}}
+   }
+   \end{center}
+   \markboth{#1}{#1}
+   \vspace*{4mm}
+}
+
+\begin{document}
+
+\lecture{4: Tensor Formats, MatMul, Accelerators}{Hao Zhang}{
+    Ian Jayachandran,
+    Samar Karanch,
+    Kevin Lin,
+    Owen Park,
+    Shaurya Raswan,
+    Julie Wu,
+    Jaewoong Yun
+    } % Lecture name, Lecturer, Scribes
+
+\section{Arithmetic Intensity (AI)}
+
+Attention merged QKV is faster single kernel calculation reduced overhead
+
+\[
+    \text{AI} = \text{\# operations } / \text{ \# bytes}
+\]
+
+\begin{lstlisting}[language=C++, title={Simple add() kernel}]
+void add(int n, float *A, float *B, float *C) {
+    for (int i = 0; i < n; i++) {
+        C[i] = A[i] + B[i];
+    }
+}
+\end{lstlisting}
+
+AI = 1/3 (Two loads, one store per add op)
+
+\begin{lstlisting}[language=C++, title={Simple add() and mul() kernel}]
+void add(int n, float* A, float* B, float* C){
+    for (int i=0; i<n; i++) {
+        C[i] = A[i] + B[i];
+    }
+}
+
+void mul(int n, float* A, float* B, float* C) {
+    for (int i=0; i<n; i++) {
+        C[i] = A[i] * B[i];
+    }
+}
+
+float* A, *B, *C, *D, *E, *tmp1, *tmp2;
+// assume arrays are allocated here
+// compute E = D + ((A + B) * C)
+add(n, A, B, tmp1);
+mul(n, tmp1, C, tmp2);
+add(n, tmp2, D, E);
+\end{lstlisting}
+AI for add() = 1/3 (Two loads, one store per math op)
+
+AI for mul() = 1/3 (Two loads, one store per math op)
+
+Overall arithmetic intensity = 1/3
+
+\begin{lstlisting}[language=C++, title={Fused kernel}]
+float *A, *B, *C, *D, *E, *tmp1, *tmp2;
+// assume arrays are allocated here
+// compute E = D + ((A + B) * C)
+void fused(int n, float *A, float B, floatC, float *D, float *E) {
+    for (int i = 0; i < n; i++) {
+        E[i] = D[i] + (A[i] + B[i]) * C[i];
+    }
+}
+// compute E = D + ((A + B) * C)
+fused(n, A, B, C, D, E);
+\end{lstlisting}
+
+AI = 3/5 (4 loads, 1 store per 3 math ops). This is an example of kernel/operation fusion.
+
+\section{Graph Optimization}
+\subsection{Parallelization}
+\subsection{Parallelization Problems}
+- partition
+- communicate
+- schedule
+- consistency
+- auto parallelize
+\subsection{Runtime \& Scheduling}
+- schedule compute / communication / memory as fast as possible
+- overlap communication w/ compute
+- subject to memory constraints
+\subsection{Operator Implementation}
+- get fastest possible implementation of MatMul, Conv2d
+- optimized for diff GPU types: V100, A100, H100, phone, TPU
+deploy model for diff GPU types need adaptation based on varying constraints
+- diff precision fp32, fp16, fp8, fp4
+- diff shape conv2d\_3x3, conv2d\_5x5, matmul2D, 3D, attention
+- goal is to maximize AI
+
+\section{Fast Operators}
+\subsection{Vectorization}
+
+
+\begin{lstlisting}[language=C++, title={Unvectorized}]
+float A[256], B[256], C[256]
+for (int i = 0; i < 256; ++i) {
+    C[i] = A[i] + B[i]
+}
+\end{lstlisting}
+
+
+\begin{lstlisting}[language=C++, title={Vectorized}]
+for (int i = 0; i < 64; ++i) {
+    float4 a = load_float4(A + 1*4);
+    float4 b = load_float4(B + i*4);
+    float4 c = add_float4(a, b);
+    store_float4(C + i* 4, c);
+\end{lstlisting}
+
+Vectorization minimizes writes
+
+\subsection{Data Layout}
+- store matrix in memory
+- stored sequentially (1D, no tensor awareness)
+- computation memory limit crucial for quantized ML
+- Row Major: A[i, j] = A.data[i * A.shape[1] + j] (left to right)
+- Col Major: A[i, j] = A.data[j * A.shape[0] + i] (top to bottom)
+- pytorch utilizes row major calc
+
+INCLUDE EXAMPLE PROGRAM ROW/COL MAJOR SETUP
+setup row major 2D array, but reading in column major, swap to make program efficient
+
+\subsubsection{Strides}
+ML systems store data in strides format: A[i, j] = A.data[offset + i * A.strides[0] + j * A.strides[1]]
+
+offset: offset of tensor relative to underlying storage
+strides: strides[i] = \# of elements needed to be skipped in memory to move "one unit" in the i-th dimeniosn of the tensor
+
+\begin{lstlisting}[language=Python]
+
+\end{lstlisting}
+
+A.strides[0] = 1, A.strides[1] = A.shape[0] --> col major
+A.strides[0] = A.shape[1], A.strides[1] = 1 --> row major
+
+if a tensor of shape [1,2,3,4] is stored in contiguous in memory following row major, its strides are (24, 12, 4, 1)
+
+strides can separate underlying storage \& view of tensor
+enable zero-copy of frequently used operators
+
+\subsubsection{Operator: Slice}
+read first 3 rows, 2 columns
+change offset by +1, reduce shape to [3,2]
+no copy needed of tensor
+\subsubsection{Operator: Transpose}
+permute by moving first stride to end 
+zero copy, underlying storage unchanged
+\subsubsection{Operator: Broadcast}
+b.strides=[1], b.shape=[1, 3], b.data=[1, 2, 3]
+broadcast so b.shape=[4, 3], b.data=[1, 2, 3], b.strides=[?]
+add elements to stride tensor
+\subsubsection{Operator: Swap Tiles}
+
+\subsubsection{Problems of Strides}
+- memory access can become not continuous
+- many vectorized ops require continuous storage
+
+\subsection{Parallelization}
+elementise, deeper dive will be covered in later lecture
+ADD EXAMPLE CODE FROM LECTURE
+parallelize through threads
+on gpu stream through processors
+
+\section{MatMul}
+\begin{lstlisting}[language=C++]
+float A[n][n], B[n][n], C[n][n];
+
+for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+        C[i][j] = 0;
+        for (int k = 0; k < n; ++k) {
+            C[i][j] += A[i][k] * B[j][k];
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{MatMul Complexity}
+O(N\^3) complexity, but can get O(N\^2.371552)
+make matmul fast by increasing ops, decreasing bytes
+
+ideally we want everythign to be local to processors (in registers), but registers are expensive \& small, thus we have memory hierarchy (L1, L2, etc. DRAM) on increasing latency
+
+\subsection{Register Tiled MatMul}
+\begin{lstlisting}[language=C++]
+dram float A[n][n], B[n][n], C[n][n];
+
+for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+        register float c = 0;
+        for (int k = 0; k < n; ++k) {
+            register float a = A[i][k];
+            register float b = B[j][k];
+            c += a * b;
+        }
+        C[i][j] = c;
+    }
+}
+\end{lstlisting}
+read a = n\^3, read b = n\^3, write C = n\^2
+need 3 registers (1 a, 1 b, 1 c) = 1 + 1 + 1 = 3
+total read cost = 2*n\^3*speed(moving component from dram to register)
+2x bc for matmul you multiply a*b (1 op) and then add to c (1 op) = 2 ops
+
+\begin{lstlisting}[language=C++]
+dram float A[n/v1][n/v3][v1][v3];
+dram float B[n/v2][n/v3][v2][v3];
+dram float C[n/v1][n/v2][v1][v2];
+
+for (int i = 0; i < n/v1; ++i) {
+    for (int j = 0; j < n/v2; ++j) {
+        register float c[v1][v2] = 0;
+        for (int k = 0; k < n/v3; ++k) {
+            register float a[v1][v3] = A[i][k];
+            register float b[v2][v3] = B[j][k];
+            c += dot(a, b.T);
+        }
+        C[i][j] = c;
+    }
+}
+\end{lstlisting}
+read a = n\^3/v2, read b = n\^3/v1, write C = n\^2
+need v1*v3 + v2*v3 + v1*v2 registers
+total read cost = (n\^3/v2 + n\^3/v1)*speed(dram -> register)
+\subsubsection{Cache-aware Tiling}
+\begin{lstlisting}[language=C++]
+dram float A[n/b1][b1][n];
+dram float B[n/b2][b2][n];
+dram float C[n/b1][n/b2][b1][b2];
+
+for (int i = 0; i < n/b1; ++i) {
+    l1cache float a[b1][n] = A[i];
+    for (int j = 0; j < n/b2; ++j) {
+        l1cache b[b2][n] = B[j];
+        
+        C[i][j] = dot(a, b.T);
+    }
+}
+\end{lstlisting}
+data movement path: DRAM -> L1 Cache (cache-tiling) -> register (register tiling)
+A dram -> l1 cost: n / b1 * n * b1 = n\^2
+B dram -> l1 cost: n / b1 * n / b2 * 2 * n = n\^3 / 1
+b1 * n + b2 * n < L1 cache size 
+
+\begin{lstlisting}[language=C++]
+dram float A[n/b1][b1/v1][n][v1];
+dram float B[n/b2][b2/v2][n][v2];
+
+for (int i = 0; i < n/b1; ++i) {
+    l1cache float a[b1/v1][n][v1] = A[i];
+    for (int j = 0; j < n/b2; ++j) {
+        l1cache b[b2/v2][n][v2] = B[j];
+        for (int x = 0; x < b1/v1; ++x) {
+            for (int y = 0; y < b2/v2; ++y) {
+                register float c[v1][v2] = 0;
+                for (int k = 0; k < n; ++k) {
+                    register float ar[v1] = a[x][k][:];
+                    register float br[v2] = b[y][k][:];
+                    C += dot(ar, br.T)
+                }
+            }
+        }
+    }
+}
+\end{lstlisting}
+outside loop = cache-tiling
+- use b1, b2
+- DRAM -> L1 reads here
+- NEED COST EQUATIONS
+inside loop = register tiling
+- use v1, v2
+- L1 -> register cache reads here
+- NEED COST EQUATIONS
+
+\begin{lstlisting}[language=C++]
+float A[n][n];
+float B[n][n];
+float C[n][n];
+
+C[i][j] = sum(A[i][k] * B[j][k], axis=k)
+\end{lstlisting}
+
+\subsection{Homework Candidate}
+
+\end{document}
