@@ -277,7 +277,7 @@ A more efficient approach is to iterate over rows first and columns second, so t
 
 \subsubsection{Strides}
 Most modern ML systems represent tensors using the stride format. In this format, each dimension has a stride that specifies how many elements to skip in memory when that index increases, along with an offset indicating the starting position. This representation is especially powerful for tensor operations, as many transformations (e.g., slicing or transposing) can be implemented as zero-copy operations by simply adjusting the strides and offset, without moving data. The indexing formula is:
-$$A[i, j] = \text{A.data}[\text{offset} + i * \text{A.strides[0]} + j *\text{A.strides[1]}]$$
+$$A[i, j] = \text{A.data}[\text{offset} + i * A.\text{strides}[0] + j * A.\text{strides}[1]]$$
 
 \paragraph{Operator: Slice}
 Used to get particular rows and columns of a tensor. The naive way is to copy 
