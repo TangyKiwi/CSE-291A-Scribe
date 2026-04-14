@@ -32,8 +32,8 @@
 
 \lstset{style=mystyle}
 
-\setlength{\oddsidemargin}{0.25 in}
-\setlength{\evensidemargin}{-0.25 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in}
 \setlength{\topmargin}{-0.6 in}
 \setlength{\textwidth}{6.5 in}
 \setlength{\textheight}{8.5 in}
@@ -265,14 +265,22 @@ A more efficient approach is to iterate over rows first and columns second, so t
 
 \subsubsection{Strides}
 Most modern ML systems represent tensors using the stride format. In this format, each dimension has a stride that specifies how many elements to skip in memory when that index increases, along with an offset indicating the starting position. This representation is especially powerful for tensor operations, as many transformations (e.g., slicing or transposing) can be implemented as zero-copy operations by simply adjusting the strides and offset, without moving data. The indexing formula is:
-$$A[i, j] = A.data[offset + i * A.strides[0] + j * A.strides[1]]$$
+$$A[i, j] = A.\text{data}[\text{offset} + i * A.\text{strides}[0] + j * A.\text{strides}[1]]$$
 
-\paragraph{Operator: Slice}
-To transpose a tensor, we modify the shape and strides while keeping the offset the same. The general rule for a transpose between dimensions $i$ and $j$ is:
+\paragraph{Operator: Slice} A slice operation can be implemented as a zero-copy operation by adjusting the offset and shape of the tensor. Specifically, for a slice that starts at index $s$ along dimension $i$:
 \begin{itemize}
-\item Swap $A.\text{shape}[i]$ and $A.\text{shape}[j]$
-\item Swap $A.\text{strides}[i]$ and $A.\text{strides}[j]$
+    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$
+    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$)
+    \item Strides remain unchanged since the memory layout is the same, just with a different starting point and size.
 \end{itemize}
+
+However, for a step slice (e.g., $A[::2]$), we also need to update the stride:
+\begin{itemize}
+    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$ 
+    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$, accounting for the step size)
+    \item Update the stride: $A.\text{strides}[i]\ *= \text{step}$ (where step is the stride of the slice, e.g., 2 for $A[::2]$)
+\end{itemize}
+
 
 \paragraph{Operator: Transpose}
 A transpose operation can be implemented as a zero-copy operation by modifying the tensor’s metadata without changing the underlying data. Specifically, transpose swaps the corresponding dimensions in both the shape and strides.
@@ -510,7 +518,5 @@ C[i][j] = sum(A[i][k] * B[j][k], axis=k)
 \end{lstlisting}
 
 Note that the read cost for A depends on v2 and not v1, because A[i][k] is independent of j. This means tiling the j dimension by v2 allows the same tile of A to be reused v2 times, which is exactly where the cost reduction comes from.
-
-\subsection{Homework Candidate}
 
 \end{document}
