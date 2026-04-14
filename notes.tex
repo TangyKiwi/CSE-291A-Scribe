@@ -461,11 +461,35 @@ Recall that in our slower standard MatMul, each iteration loads one element at a
 
 We're essentially batching a bunch of numbers and performing dot products for each tiled batch instead of computing one by one. 
 
-Now, lets re-compute the read cost: 
+Now, lets re-compute the cost: 
 
 Our total length for our triple-nested for loop is now of size $n/v1 * n/v2 * n/v3$ which simplifies to $n^3 / (v1 * v2 * v3)$. 
 
-Within the loop, reading \textbf{register a} is $v1 * v3$ since we're loading a whole tile of size v1 by v3. So we multiply this by the nested loop size to get $n^2/v2$. The same applies for reading register b.
+Breakdown per loop iteration $(i, j, k)$:
+\begin{itemize}
+    \item Load one tile from A of size $v1 * v3$
+    \item Load one tile from B of size $v2 * v3$
+\end{itemize}
+
+So total reads from A are:
+$$
+\frac{n^3}{v1 * v2 * v3} * (v1 * v3) = \frac{n^2}{v2}
+$$
+
+Total reads from B are:
+$$
+\frac{n^3}{v1 * v2 * v3} * (v2 * v3) = \frac{n^2}{v1}
+$$
+
+Now for writes to C: for each $(i, j)$ tile we write a $v1 * v2$ output tile once (after accumulating over $k$). The number of $(i, j)$ tiles is $n/v1 * n/v2$, so total writes are:
+$$
+\frac{n}{v1} * \frac{n}{v2} * (v1 * v2) = n^2
+$$
+
+So the total DRAM element traffic is:
+$$
+\frac{n^2}{v2} + \frac{n^2}{v1} + n^2
+$$
 
 For write cost, c is still $n^2$ since we still need to store every element regardless of how we tile. So we're speeding up just the read time.
 
@@ -490,6 +514,8 @@ for (int i = 0; i < n/b1; ++i) {
 \end{lstlisting}
 
 \textbf{Main Idea: Instead of loading tiles into registers, this loads tiles into the L1 cache, which is slower than registers but faster than DRAM.}
+
+The data movement is from dram, to dram -> l1 cache (cache tiling), to l1 cache -> registers (register tiling).
 
 You can fit larger tiles in this L1 cache compared to the registers. As shown in the code, we are now loading the entire row of the matrix A and B since the L1 cache is bigger than registers.
 
