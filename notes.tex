@@ -280,14 +280,26 @@ Most modern ML systems represent tensors using the stride format. In this format
 $$A[i, j] = \text{A.data}[\text{offset} + i * \text{A.strides[0]} + j *\text{A.strides[1]}]$$
 
 \paragraph{Operator: Slice}
-Used to get particular rows and columns of a tensor. The naive way is to copy the tensor and then get the values you want. But you don't have to with strides. With strides you can reuse the same existing memory where the tensor already exists and just adjust the offset and shape. Using strides makes it so that slice operator uses a zero copy of the tensor. \\
+Used to get particular rows and columns of a tensor. The naive way is to copy 
+the tensor and get the values you want. However, with strides you can reuse the 
+same existing memory where the tensor already exists. Thus, a slice operation 
+can be implemented as a zero-copy operation by adjusting the offset and shape 
+of the tensor. Specifically, for a slice that starts at index $s$ along dimension $i$:
+\begin{itemize}
+    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$
+    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$)
+    \item Strides remain unchanged since the memory layout is the same, just with a different starting point and size.
+\end{itemize}
 
-The access formula is: index = offset + (row $*$ row\_stride) + (col $*$ col\_stride)
-
-
+However, for a step slice (e.g., $A[::2]$), we also need to update the stride:
+\begin{itemize}
+    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$ 
+    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$, accounting for the step size)
+    \item Update the stride: $A.\text{strides}[i]\ *= \text{step}$ (where step is the stride of the slice, e.g., 2 for $A[::2]$)
+\end{itemize}
 
 \paragraph{Operator: Transpose}
-A transpose operation can be implemented as a zero-copy operation by modifying the tensor’s metadata without changing the underlying data. Specifically, transpose swaps the corresponding dimensions in both the shape and strides.
+A transpose operation can be implemented as a zero-copy operation by modifying the tensor's metadata without changing the underlying data. Specifically, transpose swaps the corresponding dimensions in both the shape and strides.
 
 For a transpose between dimensions $i$ and $j$:
 \begin{itemize}
