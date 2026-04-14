@@ -400,7 +400,7 @@ O(N$^3$) complexity, but can get O(N$^{2.371552}$)
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.75\textwidth]{matmul.png}
+    \includegraphics[width=0.75\textwidth]{images/matmul.png}
 \end{figure}
 
 To make matmul fast, we increase the number of operations while decreasing the number of bytes loaded from memory. Ideally we want everything to be local to processors (in registers), but registers are expensive and small, so we have memory hiearchy.
