@@ -231,16 +231,16 @@ for (int i = 0; i < 64; ++i) {
 Vectorization speeds up performance by allowing each instruction to process multiple data elements in parallel using SIMD hardware. It also reduces instruction overhead, since there are fewer instructions overall.
 
 \subsection{Data Layout}
+Data layout describes how multi-dimensional data (like matrices or tensors) is arranged in linear memory. Although we index data with multiple dimensions, it is stored as a 1D array, and the layout determines how indices map to memory locations.
 
 \subsubsection{Row-Major and Column-Major}
-Row-Major Formula:
+Row-major means elements in each row are stored contiguously in memory, and rows are placed one after another. The indexing formula is as follows:
 $$A[i, j] = A.data[i*A.shape[1]+j]$$
-Explanation: In other words, row-major means elements in each row are stored contiguously in memory, and rows are placed one after another.
+
 
 \bigskip
-Column-Major Formula:
+Column-major means elements in each column are stored contiguously in memory, and columns are placed one after another. The indexing formula is as follows:
 $$A[i, j] = A.data[j*A.shape[0] + i]$$
-Explanation: In other words, column-major means elements in each column are stored contiguously in memory, and columns are placed one after another.
 
 \bigskip
 In order to make a program efficient, it is important to consider how the matrix is stored. For example, consider the following program, assuming row-major layout:
@@ -264,45 +264,108 @@ For row-major layout, where elements in each row are stored contiguously, this r
 A more efficient approach is to iterate over rows first and columns second, so that elements are accessed sequentially within each row. This contiguous access pattern improves cache locality and overall performance.
 
 \subsubsection{Strides}
-ML systems store data in strides format: A[i, j] = A.data[offset + i * A.strides[0] + j * A.strides[1]]
-
-offset: offset of tensor relative to underlying storage
-strides: strides[i] = \# of elements needed to be skipped in memory to move "one unit" in the i-th dimeniosn of the tensor
-
-\begin{lstlisting}[language=Python]
-
-\end{lstlisting}
-
-A.strides[0] = 1, A.strides[1] = A.shape[0] --> col major
-A.strides[0] = A.shape[1], A.strides[1] = 1 --> row major
-
-if a tensor of shape [1,2,3,4] is stored in contiguous in memory following row major, its strides are (24, 12, 4, 1)
-
-strides can separate underlying storage \& view of tensor
-enable zero-copy of frequently used operators
+Most modern ML systems represent tensors using the stride format. In this format, each dimension has a stride that specifies how many elements to skip in memory when that index increases, along with an offset indicating the starting position. This representation is especially powerful for tensor operations, as many transformations (e.g., slicing or transposing) can be implemented as zero-copy operations by simply adjusting the strides and offset, without moving data. The indexing formula is:
+$$A[i, j] = A.data[offset + i * A.strides[0] + j * A.strides[1]]$$
 
 \paragraph{Operator: Slice}
-read first 3 rows, 2 columns
-change offset by +1, reduce shape to [3,2]
-no copy needed of tensor
+To transpose a tensor, we modify the shape and strides while keeping the offset the same. The general rule for a transpose between dimensions $i$ and $j$ is:
+\begin{itemize}
+\item Swap $A.\text{shape}[i]$ and $A.\text{shape}[j]$
+\item Swap $A.\text{strides}[i]$ and $A.\text{strides}[j]$
+\end{itemize}
+
 \paragraph{Operator: Transpose}
-permute by moving first stride to end 
-zero copy, underlying storage unchanged
+A transpose operation can be implemented as a zero-copy operation by modifying the tensor’s metadata without changing the underlying data. Specifically, transpose swaps the corresponding dimensions in both the shape and strides.
+
+For a transpose between dimensions $i$ and $j$:
+\begin{itemize}
+    \item Swap $A.\text{shape}[i]$ and $A.\text{shape}[j]$
+    \item Swap $A.\text{strides}[i]$ and $A.\text{strides}[j]$
+\end{itemize}
+
 \paragraph{Operator: Broadcast}
-b.strides=[1], b.shape=[1, 3], b.data=[1, 2, 3]
-broadcast so b.shape=[4, 3], b.data=[1, 2, 3], b.strides=[?]
-add elements to stride tensor
+To broadcast a tensor, we modify the shape and strides while keeping the offset the same. The general rule for broadcasting along dimension k is:
+\begin{itemize}
+\item If the original size is $1$ and expanded to size $N$, set $A.\text{shape}[k] = N$
+\item Set $A.\text{strides}[k] = 0$
+\end{itemize}
+
 \paragraph{Operator: Swap Tiles}
+To swap tiles of a tensor, we reinterpret the tensor as a grid of tiles and then change how tiles are traversed via shape and strides. The general rule is:
+\begin{itemize}
+    \item First reshape the tensor to separate tile dimensions (i.e., split each dimension into number of tiles and tile size)
+    \item Swap the tile-related dimensions in $A.\text{shape}$
+    \item Swap the corresponding entries in $A.\text{strides}$
+\end{itemize}
+
+Example:
+Consider a $4 \times 4$ tensor stored in row-major order:
+\[
+A =
+\begin{bmatrix}
+0 & 1 & 2 & 3 \\
+4 & 5 & 6 & 7 \\
+8 & 9 & 10 & 11 \\
+12 & 13 & 14 & 15
+\end{bmatrix}
+\]
+
+Divide the tensor into $2 \times 2$ tiles. Then:
+\begin{itemize}
+    \item Original shape: $[4, 4]$, strides: $[4, 1]$
+    \item Reshape to: $[2, 2, 2, 2]$ (tile\_row, tile\_col, inner\_row, inner\_col)
+    \item New strides: $[8, 2, 4, 1]$
+\end{itemize}
+
+To swap tiles, swap the tile dimensions (first two axes):
+\begin{itemize}
+    \item New shape: $[2, 2, 2, 2]$
+    \item New strides: $[2, 8, 4, 1]$
+\end{itemize}
+
+\textbf{Resulting layout:}
+\[
+\begin{bmatrix}
+0 & 1 & 8 & 9 \\
+4 & 5 & 12 & 13 \\
+2 & 3 & 10 & 11 \\
+6 & 7 & 14 & 15
+\end{bmatrix}
+\]
 
 \paragraph{Problems of Strides}
-- memory access can become not continuous
-- many vectorized ops require continuous storage
+While the stride format is flexible and enables zero-copy operations, it can introduce inefficiencies. In particular:
+\begin{itemize}
+    \item Memory access may become non-contiguous, leading to poor cache utilization
+    \item Many vectorized operations require contiguous memory, so non-contiguous tensors may need to be copied
+\end{itemize}
+
 
 \subsection{Parallelization}
-elementise, deeper dive will be covered in later lecture
-ADD EXAMPLE CODE FROM LECTURE
-parallelize through threads
-on gpu stream through processors
+Parallelization speeds up computation by running independent operations concurrently across multiple processing units. In many numerical workloads, loop iterations are independent and can be executed in parallel. For example:
+
+\begin{lstlisting}[language=C++, title={Vectorized}]
+for (int i = 0; i < 64; ++i) {
+    float4 a = load_float4(A + i*4);
+    float4 b = load_float4(B + i*4);
+    float4 c = add_float4(a, b);
+    store_float4(C + i* 4, c);
+}
+\end{lstlisting}
+
+Here, vectorization processes multiple elements at once using SIMD instructions (e.g., \texttt{float4}), providing data-level parallelism. However, the loop still executes sequentially and does not utilize thread-level parallelism.
+
+\begin{lstlisting}[language=C++, title={Vectorized \& Parallelized}]
+#pragma omp parallel for
+for (int i = 0; i < 64; ++i) {
+    float4 a = load_float4(A + i*4);
+    float4 b = load_float4(B + i*4);
+    float4 c = add_float4(a, b);
+    store_float4(C + i* 4, c);
+}
+\end{lstlisting}
+
+By adding \texttt{\#pragma omp parallel for}, the loop iterations are distributed across multiple threads, enabling thread-level parallelism. Since each iteration is independent, this is safe and can significantly improve performance.
 
 \section{MatMul-Specific Optimization}
 
