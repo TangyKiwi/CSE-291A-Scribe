@@ -435,6 +435,11 @@ In order to make matrix multiplication fast, we need to maximize Arithmetic Inte
 To re-use data in registers, we can use approaches like Tiling, which is a technique of re-using data from registers instead of accessing DRAM memory, as shown in the next section.
 
 \subsection{Register Tiled MatMul}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/regtilematmul.png}
+\end{figure}
+
 \begin{lstlisting}[language=C++]
 dram float A[n/v1][n/v3][v1][v3];
 dram float B[n/v2][n/v3][v2][v3];
@@ -444,8 +449,8 @@ for (int i = 0; i < n/v1; ++i) {
     for (int j = 0; j < n/v2; ++j) {
         register float c[v1][v2] = 0;
         for (int k = 0; k < n/v3; ++k) {
-            register float a[v1][v3] = A[i][k];
-            register float b[v2][v3] = B[j][k];
+            register float a[v1][v3] = A[i][k];    // index 4d array to get block shape [v1, v3]
+            register float b[v2][v3] = B[j][k];    // like b[0:v2, 0:v3] = B[j][k]
             c += dot(a, b.T);
         }
         C[i][j] = c;
