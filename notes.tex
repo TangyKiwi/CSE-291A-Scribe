@@ -237,10 +237,22 @@ Data layout describes how multi-dimensional data (like matrices or tensors) is a
 Row-major means elements in each row are stored contiguously in memory, and rows are placed one after another. The indexing formula is as follows:
 $$A[i, j] = A.data[i*A.shape[1]+j]$$
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[]{images/row_major.png}
+    \label{fig:row_major}
+\end{figure}
+\newpage
 
 \bigskip
 Column-major means elements in each column are stored contiguously in memory, and columns are placed one after another. The indexing formula is as follows:
 $$A[i, j] = A.data[j*A.shape[0] + i]$$
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[]{images/column_major.png}
+    \label{fig:row_major}
+\end{figure}
 
 \bigskip
 In order to make a program efficient, it is important to consider how the matrix is stored. For example, consider the following program, assuming row-major layout:
@@ -265,21 +277,13 @@ A more efficient approach is to iterate over rows first and columns second, so t
 
 \subsubsection{Strides}
 Most modern ML systems represent tensors using the stride format. In this format, each dimension has a stride that specifies how many elements to skip in memory when that index increases, along with an offset indicating the starting position. This representation is especially powerful for tensor operations, as many transformations (e.g., slicing or transposing) can be implemented as zero-copy operations by simply adjusting the strides and offset, without moving data. The indexing formula is:
-$$A[i, j] = A.\text{data}[\text{offset} + i * A.\text{strides}[0] + j * A.\text{strides}[1]]$$
+$$A[i, j] = \text{A.data}[\text{offset} + i * \text{A.strides[0]} + j *\text{A.strides[1]}]$$
 
-\paragraph{Operator: Slice} A slice operation can be implemented as a zero-copy operation by adjusting the offset and shape of the tensor. Specifically, for a slice that starts at index $s$ along dimension $i$:
-\begin{itemize}
-    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$
-    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$)
-    \item Strides remain unchanged since the memory layout is the same, just with a different starting point and size.
-\end{itemize}
+\paragraph{Operator: Slice}
+Used to get particular rows and columns of a tensor. The naive way is to copy the tensor and then get the values you want. But you don't have to with strides. With strides you can reuse the same existing memory where the tensor already exists and just adjust the offset and shape. Using strides makes it so that slice operator uses a zero copy of the tensor. \\
 
-However, for a step slice (e.g., $A[::2]$), we also need to update the stride:
-\begin{itemize}
-    \item Update the offset: $A.\text{offset } += s * A.\text{strides}[i]$ 
-    \item Update the shape: $A.\text{shape}[i]\ = \text{new\_size}$ (where new\_size is the size of the slice along dimension $i$, accounting for the step size)
-    \item Update the stride: $A.\text{strides}[i]\ *= \text{step}$ (where step is the stride of the slice, e.g., 2 for $A[::2]$)
-\end{itemize}
+The access formula is: index = offset + (row $*$ row\_stride) + (col $*$ col\_stride)
+
 
 
 \paragraph{Operator: Transpose}
@@ -380,7 +384,7 @@ By adding \texttt{\#pragma omp parallel for}, the loop iterations are distribute
 This section goes over how we can speed up an important operation in neural networks: Matrix Multiplication.
 
 \subsection{MatMul Complexity}
-O(N\^3) complexity, but can get O(N\^2.371552)
+O(N$^3$) complexity, but can get O(N$^{2.371552}$)
 
 \subsection{Slow Operation Example of MatMul:} 
 
