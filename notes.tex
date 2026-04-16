@@ -6,6 +6,7 @@
 \usepackage{xcolor}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\usepackage{caption}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -76,7 +77,8 @@
     Owen Park,
     Shaurya Raswan,
     Julie Wu,
-    Jaewoong Yun
+    Jaewoong Yun,
+    Ian Jayachandran
     } % Lecture name, Lecturer, Scribes
 
 \section{Arithmetic Intensity (AI)}
@@ -142,6 +144,8 @@ add(n, tmp2, D, E);
 Both the add and multiply operations are $\frac{1}{3}$, as explained in Example 1. If we call the add operation twice and multiply operation once, we have $3n$ total computations and $9n$ total loads and stores, so $\frac{2n}{6n} = \frac{1}{3}.$
 
 \textbf{Therefore, AI is still $\frac{1}{3}$.} 
+
+This example demonstrates a general principle: "If every part of an operation keep the same AI, the overall AI remains the same."
 
 This is wasteful, as we see $tmp1$ being written to memory during add(n, A, B, tmp1), and loaded from memory during mul(n, tmp1, C, tmp2). The same process applies to $tmp2$. Why not keep $tmp1$ or $tmp2$ in memory for quicker processing?
 
@@ -401,7 +405,8 @@ MatMul normally takes $O(N^3)$ complexity, but advanced algorithms can reduce co
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.75\textwidth]{images/matmul.png}
+    \includegraphics[width=0.70\textwidth]{images/matmul.png}
+    \caption*{Improvements in MatMul runtime over time}
 \end{figure}
 
 To make matmul fast, we increase the number of operations while decreasing the number of bytes loaded from memory. Ideally, we want everything to be local to processors (in registers), but registers are expensive and small, so we have memory hierarchy.
@@ -498,7 +503,7 @@ $$
 \frac{n^2}{v2} + \frac{n^2}{v1} + n^2
 $$
 
-For the write cost, $c$ is still $n^2$, since we still need to store every element regardless of how we tile. As a result, only the read time is improved.
+For the write cost, $c$ is still $n^2$, since we still need to store every element regardless of how we tile. As a result, only the read time is improved. Interestingly, this derived cost equation shows that load cost is not related to v3.
 
 We also need to increase the number of registers, since each register can only hold one element. Consequently, the number of registers is the sum of our size of our tiles for A ($v1 \cdot v3$), B ($v2 \cdot v3$), and C ($v1 \cdot v2$).
 
@@ -585,6 +590,7 @@ Note that the read cost for A depends on $v2$ and not $v1$, because $A[i][k]$ is
     \item{Shaurya Raswan}: Outline, Proofreading, Images
     \item{Julie Wu}: Proofreading
     \item{Jaewoong Yun}: Section 1, 4
+    \item{Ian Jayachandran}: Proofreading and minor additions
 \end{itemize}
 All work can be tracked through the GitHub repository: \href{https://github.com/TangyKiwi/CSE-291A-Scribe}{https://github.com/TangyKiwi/CSE-291A-Scribe}
 
